@@ -1,28 +1,28 @@
-name: kali-wd-auth ghcr build
+name: wd-auth ghcr build
 
-# Builds the kali-wd-auth image and pushes it to GHCR under the stacktek
+# Builds the wd-auth image and pushes it to GHCR under the stacktek
 # namespace. Triggered by ansible-build after it compiles the Rust binary
 # and uploads the workflow artifact. Running in this repo ensures GHCR links
 # the package to stacktek automatically.
 #
 # The Containerfile is inlined here because the stacktek repo doesn't host
-# the kali-wd-auth source — it lives in ansible-build/apps/kali-wd-auth/.
+# the wd-auth source — it lives in ansible-build/apps/wd-auth/.
 # Keep this inline Containerfile in sync with
-# ansible-build/apps/kali-wd-auth/Containerfile.
+# ansible-build/apps/wd-auth/Containerfile.
 #
-# NOTE: This workflow builds ALL three images the kali-wd deploy needs:
-#   1. kali-wd-auth  — from the ansible-build artifact (Rust binary + static)
-#   2. kali-xfce     — from workspaces/web-desktops/kali/xfce/Containerfile
-#   3. caddy-coraza  — from caddy/Containerfile
-# This makes the pipeline self-contained — running kali-wd-auth-build in
+# NOTE: This workflow builds ALL three images the wd deploy needs:
+#   1. wd-auth      — from the ansible-build artifact (Rust binary + static)
+#   2. kali-xfce    — from workspaces/web-desktops/kali/xfce/Containerfile
+#   3. caddy-coraza — from caddy/Containerfile
+# This makes the pipeline self-contained — running wd-auth-build in
 # ansible-build produces every image podman-compose pull will fetch.
 
 on:
   repository_dispatch:
-    types: [kali-wd-auth-build]
+    types: [wd-auth-build]
 
 env:
-  IMAGE_KALI_WD_AUTH: ghcr.io/decyphertek-io/stacktek/kali-wd-auth
+  IMAGE_WD_AUTH: ghcr.io/decyphertek-io/stacktek/wd-auth
   IMAGE_KALI_XFCE: ghcr.io/decyphertek-io/stacktek/kali-xfce
   IMAGE_CADDY_CORAZA: ghcr.io/decyphertek-io/stacktek/caddy-coraza
 
@@ -44,55 +44,55 @@ jobs:
             -H "Authorization: token $CROSS_REPO_PAT" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/decyphertek-io/ansible-build/actions/runs/${RUN_ID}/artifacts" \
-            | jq -r '.artifacts[] | select(.name=="kali-wd-auth-release") | .archive_download_url')
+            | jq -r '.artifacts[] | select(.name=="wd-auth-release") | .archive_download_url')
 
           curl -sfL \
             -H "Authorization: token $CROSS_REPO_PAT" \
-            -o /tmp/kali-wd-auth-release.zip \
+            -o /tmp/wd-auth-release.zip \
             "$ARTIFACT_URL"
 
-          unzip /tmp/kali-wd-auth-release.zip -d /tmp/kali-wd-auth-release
+          unzip /tmp/wd-auth-release.zip -d /tmp/wd-auth-release
 
       - name: Stage binary and static assets into build context
         run: |
-          cp /tmp/kali-wd-auth-release/kali-wd-auth ./kali-wd-auth
-          chmod +x ./kali-wd-auth
-          tar -xzf /tmp/kali-wd-auth-release/static.tar.gz -C .
+          cp /tmp/wd-auth-release/wd-auth ./wd-auth
+          chmod +x ./wd-auth
+          tar -xzf /tmp/wd-auth-release/static.tar.gz -C .
 
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build + push kali-wd-auth
+      - name: Build + push wd-auth
         run: |
-          # Inline Containerfile — mirrors ansible-build/apps/kali-wd-auth/Containerfile.
+          # Inline Containerfile — mirrors ansible-build/apps/wd-auth/Containerfile.
           # Keep both in sync.
-          cat > /tmp/Containerfile.kali-wd-auth <<'EOF'
+          cat > /tmp/Containerfile.wd-auth <<'EOF'
           FROM cgr.dev/chainguard/static:latest
 
-          LABEL org.opencontainers.image.title="kali-wd-auth" \
+          LABEL org.opencontainers.image.title="wd-auth" \
                 org.opencontainers.image.licenses="LicenseRef-PolyForm-Noncommercial-1.0.0"
 
-          ENV KALI_WD_BIND=0.0.0.0:8443 \
-              KALI_WD_DATA=/data \
-              KALI_WD_STATIC=/static \
-              KALI_WD_TLS_CERT=/certs/cert.pem \
-              KALI_WD_TLS_KEY=/certs/key.pem \
-              KALI_WD_VNC_HOST=kali-xfce \
-              KALI_WD_VNC_PORT=5901 \
-              KALI_WD_AUDIO_PORT=4713
+          ENV WD_BIND=0.0.0.0:8443 \
+              WD_DATA=/data \
+              WD_STATIC=/static \
+              WD_TLS_CERT=/certs/cert.pem \
+              WD_TLS_KEY=/certs/key.pem \
+              WD_VNC_HOST=desktop \
+              WD_VNC_PORT=5901 \
+              WD_AUDIO_PORT=4713
 
-          COPY kali-wd-auth /kali-wd-auth
-          COPY static/      /static/
+          COPY wd-auth /wd-auth
+          COPY static/ /static/
 
           EXPOSE 8443
           USER 0:0
           HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-            CMD ["/kali-wd-auth", "healthcheck"]
-          ENTRYPOINT ["/kali-wd-auth"]
+            CMD ["/wd-auth", "healthcheck"]
+          ENTRYPOINT ["/wd-auth"]
           EOF
 
-          docker build -t "${{ env.IMAGE_KALI_WD_AUTH }}:latest" -f /tmp/Containerfile.kali-wd-auth .
-          docker push "${{ env.IMAGE_KALI_WD_AUTH }}:latest"
+          docker build -t "${{ env.IMAGE_WD_AUTH }}:latest" -f /tmp/Containerfile.wd-auth .
+          docker push "${{ env.IMAGE_WD_AUTH }}:latest"
 
       - name: Build + push kali-xfce
         run: |
@@ -132,6 +132,6 @@ jobs:
             done
             echo "[$pkg] pruned $deleted (kept newest $keep)"
           }
-          prune_pkg "stacktek/kali-wd-auth"
+          prune_pkg "stacktek/wd-auth"
           prune_pkg "stacktek/kali-xfce"
           prune_pkg "stacktek/caddy-coraza"
